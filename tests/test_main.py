@@ -14,7 +14,6 @@ from main import (
     sort_existing_files,
 )
 
-
 SAMPLE = "METM24_20261005t030639_13488_1_1_BRLK_RLI_log10.tif"
 
 
@@ -24,7 +23,9 @@ class FilenameTests(unittest.TestCase):
 
     def test_invalid_calendar_date_is_rejected(self) -> None:
         self.assertIsNone(
-            parse_acquisition_date("METM24_20261345t030639_13488_1_1_BRLK_RLI_log10.tif")
+            parse_acquisition_date(
+                "METM24_20261345t030639_13488_1_1_BRLK_RLI_log10.tif"
+            )
         )
 
     def test_unexpected_filename_is_rejected(self) -> None:

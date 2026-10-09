@@ -21,7 +21,6 @@ from logging.handlers import RotatingFileHandler
 
 from dotenv import load_dotenv
 
-
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DEST_DIR = r"Z:\ENVISAT\METEOP"
 DEFAULT_FILE_GLOB = "METM24_*_BRLK_RLI_log10.tif"
@@ -381,7 +380,9 @@ def download_remote_files(
                     try:
                         part_path.unlink(missing_ok=True)
                     except OSError:
-                        logger.warning("Не удалось удалить временный файл: %s", part_path)
+                        logger.warning(
+                            "Не удалось удалить временный файл: %s", part_path
+                        )
 
     except ftplib.all_errors:
         logger.exception("Не удалось выполнить FTP-сеанс.")
