@@ -219,8 +219,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# VS Code: track project configuration only; ignore private workspace files
-.vscode/*
-!.vscode/settings.json
-!.vscode/launch.json
-!.vscode/tasks.json
+# VS Code workspace settings are local to each developer
+.vscode/
