@@ -403,10 +403,14 @@ def main() -> int:
     """Выполняет сортировку архива, загрузку с FTP и завершает работу."""
     if sys.platform == "win32":
         for stream in (sys.stdout, sys.stderr):
-            try:
-                stream.reconfigure(encoding="utf-8")
-            except (AttributeError, OSError, UnicodeError):
-                pass
+            # TextIO в типовых объявлениях не всегда описывает reconfigure(),
+            # хотя этот метод доступен у стандартных потоков Python.
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                try:
+                    reconfigure(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    pass
 
     load_dotenv(BASE_DIR / ".env", override=False)
 
