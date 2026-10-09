@@ -1,22 +1,59 @@
-{
-    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-    "python.languageServer": "Pylance",
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticMode": "openFilesOnly",
-    "python.analysis.autoSearchPaths": true,
-    "python.analysis.autoImportCompletions": true,
-    "python.analysis.completeFunctionParens": true,
-    "python.testing.unittestEnabled": true,
-    "python.testing.pytestEnabled": false,
-    "python.testing.unittestArgs": [
-        "-v",
-        "-s",
-        "tests",
-        "-p",
-        "test_*.py"
-    ],
-    "editor.formatOnSave": true,
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    }
-}
+//file associations
+	"files.associations":{
+		"*.f90": "FortranFreeForm",
+		"*.f": "FortranFreeForm",
+		"*.f03": "FortranFreeForm",
+		"*.f08": "FortranFreeForm",
+		"**/*.html": "html",
+		"**/*.ipynb": "jupyter",
+		"**/requirements{/**,*}.{txt,in}": "pip-requirements"
+},
+	"editor.formatOnSave": true,
+
+	"files.exclude": {
+		"**/__pycache__": false,
+		"**/*.pyc": false,
+		"**/.venv": false,
+		"**/.git": false,
+		"**/.DS_Store": false,
+		"**/.pytest_cache": true
+	},
+	//others
+	"Codegeex.RepoIndex": true,
+	//fortran
+	"fortran.fortls.disabled": false,
+	//git
+	"git.autoRepositoryDetection": "subFolders",
+	//python
+	{
+	"python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+	"python.languageServer": "Pylance",
+	"python.analysis.typeCheckingMode": "basic",
+	"python.analysis.diagnosticMode": "openFilesOnly",
+	"python.analysis.autoSearchPaths": true,
+	"python.analysis.autoImportCompletions": true,
+	"python.analysis.completeFunctionParens": true,
+	"python.testing.unittestEnabled": true,
+	"python.testing.pytestEnabled": false,
+	"python.testing.unittestArgs": ["-v", "-s", "tests", "-p", "test_*.py"],
+	"editor.formatOnSave": true,
+	"[python]": {
+		"editor.defaultFormatter": "ms-python.black-formatter"
+	},
+	},
+	
+	"cSpell.words": ["BRLK", "dotenv", "ENVISAT", "METEOP", "METM", "ntsomz", "БРЛК"]
+
+//LaTeX
+	"latex-workshop.latex.outDir": "out",
+	"latex-workshop.latex.clean.enabled": true,
+	"latex-workshop.latex.clean.method": "glob",
+	"latex-workshop.latex.recipes": [
+		{
+			"name": "pdflatex * 2",
+			"tools": ["pdflatex", "pdflatex"]
+		}
+	],
+
+// Исключаем файлы из проверки орфографии
+	"cSpell.ignorePaths": [".gitignore", "LICENSE", "*.log", "node_modules", "test_improvements.py"]
