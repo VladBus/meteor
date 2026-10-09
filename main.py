@@ -281,7 +281,13 @@ def download_remote_files(
     )
 
     try:
-        with ftplib.FTP(settings.ftp_host, timeout=settings.ftp_timeout) as ftp:
+        ftp = ftplib.FTP()
+        ftp.connect(
+            settings.ftp_host,
+            settings.ftp_port,
+            timeout=settings.ftp_timeout,
+        )
+        with ftp:
             ftp.login(settings.ftp_user, settings.ftp_password)
             ftp.set_pasv(True)
 
