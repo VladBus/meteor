@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import calendar
 import fnmatch
 import ftplib
 import logging
@@ -114,8 +115,16 @@ def configure_logging(log_dir: Path) -> logging.Logger:
 
 
 def filename_matches(filename: str, file_glob: str) -> bool:
-    """Проверяет имя файла по маске без учёта регистра."""
-    return fnmatch.fnmatchcase(filename.casefold(), file_glob.casefold())
+    """Проверяет маску без учёта регистра; поддерживает расширения .tif и .tiff."""
+    normalized_name = filename.casefold()
+    normalized_pattern = file_glob.casefold()
+    patterns = [normalized_pattern]
+
+    # Шаблон в .env обычно заканчивается на .tif. Разрешаем также вариант .tiff.
+    if normalized_pattern.endswith(".tif"):
+        patterns.append(normalized_pattern[:-4] + ".tiff")
+
+    return any(fnmatch.fnmatchcase(normalized_name, pattern) for pattern in patterns)
 
 
 def parse_acquisition_date(filename: str) -> date | None:
@@ -134,18 +143,70 @@ def parse_acquisition_date(filename: str) -> date | None:
 
 
 def destination_path_for_file(dest_root: Path, filename: str) -> Path | None:
-    """Формирует путь архива YYYY\\MM\\DD по дате в имени файла."""
+    """
+    Формирует путь архива YYYY/MM/DD-DD по семидневным интервалам внутри месяца.
+    Например, 2026-10-05 попадает в каталог 2026/10/01-07.
+    """
     acquisition_date = parse_acquisition_date(filename)
     if acquisition_date is None:
         return None
+
+    period_start = ((acquisition_date.day - 1) // 7) * 7 + 1
+    last_day_of_month = calendar.monthrange(
+        acquisition_date.year,
+        acquisition_date.month,
+    )[1]
+    period_end = min(period_start + 6, last_day_of_month)
+    period_folder = f"{period_start:02d}-{period_end:02d}"
 
     return (
         dest_root
         / f"{acquisition_date.year:04d}"
         / f"{acquisition_date.month:02d}"
-        / f"{acquisition_date.day:02d}"
+        / period_folder
         / filename
     )
+
+
+def remove_empty_directories(
+    dest_root: Path,
+    logger: logging.Logger,
+) -> int:
+    """
+    Удаляет только пустые каталоги внутри архива.
+    Файлы и каталоги с содержимым не удаляются.
+    """
+    removed_count = 0
+
+    try:
+        directories = [
+            path for path in dest_root.rglob("*") if path.is_dir()
+        ]
+    except OSError:
+        logger.exception("Не удалось просканировать каталоги архива: %s", dest_root)
+        return 0
+
+    # Сначала проверяем самые глубокие каталоги, затем родительские.
+    directories.sort(key=lambda path: len(path.parts), reverse=True)
+
+    for directory in directories:
+        try:
+            next(directory.iterdir())
+            continue
+        except StopIteration:
+            pass
+        except OSError:
+            logger.warning("Не удалось проверить каталог: %s", directory)
+            continue
+
+        try:
+            directory.rmdir()
+            removed_count += 1
+            logger.info("Удалён пустой каталог: %s", directory)
+        except OSError:
+            logger.warning("Не удалось удалить пустой каталог: %s", directory)
+
+    return removed_count
 
 
 def sort_existing_files(
@@ -154,8 +215,9 @@ def sort_existing_files(
     logger: logging.Logger,
 ) -> dict[str, int]:
     """
-    Ищет подходящие TIFF во всём архиве и исправляет их расположение.
-    При конфликте имён не удаляет исходный файл и не перезаписывает архивный.
+    Ищет снимки по всему архиву и приводит их к структуре YYYY/MM/01-07 и т. д.
+    При конфликтах имён не удаляет исходный файл и не перезаписывает архивный.
+    После сортировки удаляет только пустые каталоги старой структуры.
     """
     stats = {
         "moved": 0,
@@ -163,6 +225,7 @@ def sort_existing_files(
         "duplicates": 0,
         "unrecognized": 0,
         "errors": 0,
+        "empty_dirs_removed": 0,
     }
 
     try:
@@ -177,7 +240,7 @@ def sort_existing_files(
         return stats
 
     logger.info(
-        "Проверка локального архива: найдено подходящих файлов — %d",
+        "Проверка локального архива: найдено снимков по маске — %d",
         len(candidates),
     )
 
@@ -207,20 +270,111 @@ def sort_existing_files(
 
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
-            logger.info("Отсортирован: %s -> %s", source, target)
+            logger.info("Отсортирован по недельному интервалу: %s -> %s", source, target)
             stats["moved"] += 1
         except OSError:
             logger.exception("Ошибка при сортировке файла: %s", source)
             stats["errors"] += 1
 
+    stats["empty_dirs_removed"] = remove_empty_directories(dest_root, logger)
+
     logger.info(
-        "Локальная сортировка завершена: перемещено=%d, уже на месте=%d, "
-        "дубликатов=%d, без даты=%d, ошибок=%d",
+        "Сортировка архива завершена: перемещено=%d, уже на месте=%d, "
+        "конфликтов имён=%d, без корректной даты=%d, пустых каталогов удалено=%d, "
+        "ошибок=%d",
         stats["moved"],
         stats["already_sorted"],
         stats["duplicates"],
         stats["unrecognized"],
+        stats["empty_dirs_removed"],
         stats["errors"],
+    )
+    return stats
+
+
+def audit_archive(
+    dest_root: Path,
+    file_glob: str,
+    logger: logging.Logger,
+) -> dict[str, int]:
+    """
+    Проверяет итоговый архив:
+    - снимки находятся в правильных недельных каталогах;
+    - файлы с некорректной датой помечаются;
+    - посторонние файлы и временные .part регистрируются, но не удаляются.
+    """
+    stats = {
+        "recognized": 0,
+        "misplaced": 0,
+        "invalid_date": 0,
+        "unexpected": 0,
+        "temporary": 0,
+        "scan_errors": 0,
+    }
+
+    try:
+        entries = list(dest_root.rglob("*"))
+    except OSError:
+        logger.exception("Не удалось выполнить аудит архива: %s", dest_root)
+        stats["scan_errors"] += 1
+        return stats
+
+    for path in entries:
+        if not path.is_file():
+            continue
+
+        if filename_matches(path.name, file_glob):
+            stats["recognized"] += 1
+            expected_path = destination_path_for_file(dest_root, path.name)
+
+            if expected_path is None:
+                stats["invalid_date"] += 1
+                logger.warning(
+                    "АУДИТ: не распознана дата снимка; файл не перемещён: %s",
+                    path,
+                )
+                continue
+
+            try:
+                correctly_placed = path.resolve() == expected_path.resolve()
+            except OSError:
+                correctly_placed = False
+
+            if not correctly_placed:
+                stats["misplaced"] += 1
+                logger.warning(
+                    "АУДИТ: снимок находится не в целевом недельном каталоге. "
+                    "Ожидалось: %s; найдено: %s",
+                    expected_path,
+                    path,
+                )
+            continue
+
+        if path.name.casefold().endswith(".part"):
+            stats["temporary"] += 1
+            logger.warning(
+                "АУДИТ: найден временный/незавершённый файл; автоматическое удаление "
+                "не выполняется: %s",
+                path,
+            )
+        else:
+            stats["unexpected"] += 1
+            logger.warning(
+                "АУДИТ: посторонний файл в архиве; автоматическое удаление "
+                "не выполняется: %s",
+                path,
+            )
+
+    logger.info(
+        "Аудит архива: распознанных снимков=%d, неверное расположение=%d, "
+        "некорректная дата=%d, временных .part=%d, посторонних файлов=%d, "
+        "ошибок сканирования=%d",
+        stats["recognized"],
+        stats["misplaced"],
+        stats["invalid_date"],
+        stats["temporary"],
+        stats["unexpected"],
+        stats["scan_errors"],
     )
     return stats
 
@@ -253,7 +407,7 @@ def download_remote_files(
     logger: logging.Logger,
 ) -> dict[str, int]:
     """
-    Загружает файлы по заданной маске в датированные каталоги.
+    Загружает файлы по заданной маске в недельные каталоги архива.
     Файл сначала записывается как .part и публикуется в архиве только после
     успешной передачи и, если размер известен, проверки размера.
     """
@@ -436,17 +590,31 @@ def main() -> int:
 
     sort_stats = sort_existing_files(settings.dest_dir, settings.file_glob, logger)
     ftp_stats = download_remote_files(settings, logger)
+    audit_stats = audit_archive(settings.dest_dir, settings.file_glob, logger)
 
-    total_errors = sort_stats["errors"] + ftp_stats["errors"]
-    logger.info(
-        "========== Завершение meteor: локально перемещено=%d, "
-        "FTP загружено=%d, ошибок=%d ==========",
-        sort_stats["moved"],
-        ftp_stats["downloaded"],
-        total_errors,
+    operational_errors = (
+        sort_stats["errors"]
+        + ftp_stats["errors"]
+        + audit_stats["scan_errors"]
+    )
+    archive_issues = (
+        audit_stats["misplaced"]
+        + audit_stats["invalid_date"]
+        + audit_stats["unexpected"]
+        + audit_stats["temporary"]
     )
 
-    return 1 if total_errors else 0
+    logger.info(
+        "========== Завершение meteor: перемещено=%d, FTP загружено=%d, "
+        "ошибок операций=%d, замечаний аудита=%d ==========",
+        sort_stats["moved"],
+        ftp_stats["downloaded"],
+        operational_errors,
+        archive_issues,
+    )
+
+    # Ненулевой код сообщает о сбоях операций или о файлах, требующих проверки.
+    return 1 if operational_errors or archive_issues else 0
 
 
 if __name__ == "__main__":
