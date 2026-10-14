@@ -158,7 +158,7 @@ def destination_path_for_file(dest_root: Path, filename: str) -> Path | None:
         f"W{iso_week:02d}_{week_start.isoformat()}_{week_end.isoformat()}"
     )
 
-    return dest_root / f"{iso_year:04d}" / week_folder
+    return dest_root / f"{iso_year:04d}" / week_folder / filename
 
 
 def remove_empty_directories(

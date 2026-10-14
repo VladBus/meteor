@@ -50,7 +50,7 @@ class FilenameTests(unittest.TestCase):
         root = Path("Z:/ENVISAT/METEOP")
         self.assertEqual(
             destination_path_for_file(root, SAMPLE),
-            root / "2026" / "W41_2026-10-05_2026-10-11",
+            root / "2026" / "W41_2026-10-05_2026-10-11" / SAMPLE,
         )
 
     def test_iso_week_boundaries_and_month_crossing(self) -> None:
