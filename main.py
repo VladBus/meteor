@@ -143,16 +143,19 @@ def parse_acquisition_date(filename: str) -> date | None:
 
 def destination_path_for_file(dest_root: Path, filename: str) -> Path | None:
     """
-    Формирует путь YYYY/ISO-неделя, где одна неделя хранится в одной папке.
-    Например, 2026-09-28 — 2026-10-04 попадает в W40_2026-09-28_2026-10-04.
-    Папка года определяется по ISO-правилам, а не только по календарному году даты.
+    Формирует путь YYYY/период вторник–понедельник в одной папке.
+    Номер W — ISO-неделя даты начала периода (вторника).
+    Например, 2026-10-12 попадает в W41_2026-10-06_2026-10-12.
+    Год каталога определяется по ISO-правилам для даты начала периода.
     """
     acquisition_date = parse_acquisition_date(filename)
     if acquisition_date is None:
         return None
 
-    iso_year, iso_week, _ = acquisition_date.isocalendar()
-    week_start = acquisition_date - timedelta(days=acquisition_date.weekday())
+    # Archive periods run from Tuesday through the following Monday.
+    days_since_tuesday = (acquisition_date.weekday() - 1) % 7
+    week_start = acquisition_date - timedelta(days=days_since_tuesday)
+    iso_year, iso_week, _ = week_start.isocalendar()
     week_end = week_start + timedelta(days=6)
     week_folder = f"W{iso_week:02d}_{week_start.isoformat()}_{week_end.isoformat()}"
 
@@ -204,7 +207,8 @@ def sort_existing_files(
     logger: logging.Logger,
 ) -> dict[str, int]:
     """
-    Ищет снимки по всему архиву и переносит их в каталоги ISO-недель внутри ISO-года.
+    Ищет снимки по всему архиву и переносит их в недельные каталоги вторник–понедельник.
+    Номер каталога и год определяются по ISO-неделе даты начала периода.
     При конфликтах имён не удаляет исходный файл и не перезаписывает архивный.
     После сортировки удаляет только пустые каталоги старой структуры.
     """
@@ -259,7 +263,7 @@ def sort_existing_files(
 
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
-            logger.info("Отсортирован по ISO-неделе: %s -> %s", source, target)
+            logger.info("Отсортирован в недельный каталог: %s -> %s", source, target)
             stats["moved"] += 1
         except OSError:
             logger.exception("Ошибка при сортировке файла: %s", source)
@@ -288,7 +292,7 @@ def audit_archive(
 ) -> dict[str, int]:
     """
     Проверяет итоговый архив:
-    - снимки находятся в правильных недельных каталогах;
+    - снимки находятся в правильных недельных каталогах вторник–понедельник;
     - файлы с некорректной датой помечаются;
     - посторонние файлы и временные .part регистрируются, но не удаляются.
     """
@@ -338,7 +342,7 @@ def audit_archive(
             if not correctly_placed:
                 stats["misplaced"] += 1
                 logger.warning(
-                    "АУДИТ: снимок находится не в целевом каталоге ISO-недели. "
+                    "АУДИТ: снимок находится не в целевом недельном каталоге. "
                     "Ожидалось: %s; найдено: %s",
                     expected_path,
                     path,
