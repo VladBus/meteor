@@ -38,45 +38,48 @@ class FilenameTests(unittest.TestCase):
         self.assertIsNone(parse_acquisition_date("unrelated_image.tif"))
 
     def test_file_glob_matches_tif_and_tiff(self) -> None:
-        """Основная маска принимает оба распространённых расширения TIFF."""
+        """Основная маска принимает оба расширения TIFF."""
         self.assertTrue(filename_matches(SAMPLE, DEFAULT_FILE_GLOB))
         self.assertTrue(
             filename_matches(SAMPLE.removesuffix(".tif") + ".tiff", DEFAULT_FILE_GLOB)
         )
         self.assertFalse(filename_matches("METM24_20261005.tif", DEFAULT_FILE_GLOB))
 
-    def test_target_path_uses_week_bucket(self) -> None:
-        """5 октября попадает в недельный интервал 01-07."""
+    def test_target_path_uses_iso_week_folder(self) -> None:
+        """Снимок 5 октября помещается в каталог ISO-недели 41."""
         root = Path("Z:/ENVISAT/METEOP")
         self.assertEqual(
             destination_path_for_file(root, SAMPLE),
-            root / "2026" / "10" / "01-07" / SAMPLE,
+            root / "2026" / "W41_2026-10-05_2026-10-11",
         )
 
-    def test_week_bucket_boundaries(self) -> None:
-        """Проверяются границы семидневных интервалов внутри месяца."""
+    def test_iso_week_boundaries_and_month_crossing(self) -> None:
+        """Проверяются недели, пересекающие месяцы и календарные годы."""
         root = Path("archive")
         test_cases = [
-            ("20261001", "01-07"),
-            ("20261007", "01-07"),
-            ("20261008", "08-14"),
-            ("20261014", "08-14"),
-            ("20261015", "15-21"),
-            ("20261022", "22-28"),
-            ("20261028", "22-28"),
-            ("20261029", "29-31"),
-            ("20261031", "29-31"),
-            ("20260430", "29-30"),
+            ("20260928", "2026", "W40_2026-09-28_2026-10-04"),
+            ("20260930", "2026", "W40_2026-09-28_2026-10-04"),
+            ("20261001", "2026", "W40_2026-09-28_2026-10-04"),
+            ("20261004", "2026", "W40_2026-09-28_2026-10-04"),
+            ("20261005", "2026", "W41_2026-10-05_2026-10-11"),
+            ("20261011", "2026", "W41_2026-10-05_2026-10-11"),
+            ("20261012", "2026", "W42_2026-10-12_2026-10-18"),
+            ("20261231", "2026", "W53_2026-12-28_2027-01-03"),
+            ("20270101", "2026", "W53_2026-12-28_2027-01-03"),
+            ("20270104", "2027", "W01_2027-01-04_2027-01-10"),
         ]
-        for date_text, expected_bucket in test_cases:
+        for date_text, expected_year, expected_week in test_cases:
             with self.subTest(date=date_text):
-                filename = f"METM24_{date_text}t030639_13488_1_1_BRLK_RLI_log10.tif"
+                filename = (
+                    f"METM24_{date_text}t030639_13488_1_1_BRLK_RLI_log10.tif"
+                )
                 target = destination_path_for_file(root, filename)
                 if target is None:
                     raise AssertionError(
                         f"Destination path was not created for {filename}"
                     )
-                self.assertEqual(target.parent.name, expected_bucket)
+                self.assertEqual(target.parent.name, expected_week)
+                self.assertEqual(target.parent.parent.name, expected_year)
 
 
 class LocalSortingTests(unittest.TestCase):
@@ -93,12 +96,12 @@ class LocalSortingTests(unittest.TestCase):
         """Удаляет временный каталог после теста."""
         self.temp_dir.cleanup()
 
-    def test_misplaced_file_is_moved_to_week_bucket(self) -> None:
-        """Снимок из старой структуры переносится в недельный каталог."""
+    def test_misplaced_file_is_moved_to_iso_week_folder(self) -> None:
+        """Снимок из старой месячной структуры перемещается в ISO-неделю."""
         source = self.root / "2026" / "10" / "05" / SAMPLE
         source.parent.mkdir(parents=True)
         source.write_bytes(b"test TIFF data")
-        expected = self.root / "2026" / "10" / "01-07" / SAMPLE
+        expected = self.root / "2026" / "W41_2026-10-05_2026-10-11" / SAMPLE
 
         stats = sort_existing_files(self.root, DEFAULT_FILE_GLOB, self.logger)
 
@@ -109,7 +112,7 @@ class LocalSortingTests(unittest.TestCase):
 
     def test_second_sort_is_idempotent(self) -> None:
         """Повторная сортировка не перемещает уже правильно размещённый файл."""
-        target = self.root / "2026" / "10" / "01-07" / SAMPLE
+        target = self.root / "2026" / "W41_2026-10-05_2026-10-11" / SAMPLE
         target.parent.mkdir(parents=True)
         target.write_bytes(b"test TIFF data")
 
@@ -122,7 +125,7 @@ class LocalSortingTests(unittest.TestCase):
     def test_name_collision_does_not_delete_source(self) -> None:
         """При конфликте имён исходный и архивный файлы сохраняются."""
         source = self.root / "unsorted" / SAMPLE
-        target = self.root / "2026" / "10" / "01-07" / SAMPLE
+        target = self.root / "2026" / "W41_2026-10-05_2026-10-11" / SAMPLE
         source.parent.mkdir(parents=True)
         target.parent.mkdir(parents=True)
         source.write_bytes(b"original")
@@ -145,11 +148,11 @@ class LocalSortingTests(unittest.TestCase):
         self.assertEqual(stats["unexpected"], 1)
 
     def test_tiff_extension_is_sorted(self) -> None:
-        """Снимок с расширением .tiff также переносится в недельный каталог."""
+        """Снимок с расширением .tiff также переносится в ISO-неделю."""
         filename = SAMPLE.removesuffix(".tif") + ".tiff"
         source = self.root / filename
         source.write_bytes(b"test TIFF data")
-        expected = self.root / "2026" / "10" / "01-07" / filename
+        expected = self.root / "2026" / "W41_2026-10-05_2026-10-11" / filename
 
         stats = sort_existing_files(self.root, DEFAULT_FILE_GLOB, self.logger)
 
@@ -157,7 +160,7 @@ class LocalSortingTests(unittest.TestCase):
         self.assertEqual(stats["moved"], 1)
 
     def test_audit_detects_misplaced_snapshot(self) -> None:
-        """Аудит отмечает снимок, если он остался не в недельной папке."""
+        """Аудит отмечает снимок вне каталога его ISO-недели."""
         wrong_path = self.root / "2026" / "10" / "05" / SAMPLE
         wrong_path.parent.mkdir(parents=True)
         wrong_path.write_bytes(b"test TIFF data")

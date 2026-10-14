@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import calendar
 import fnmatch
 import ftplib
 import logging
@@ -16,7 +15,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from logging.handlers import RotatingFileHandler
 
@@ -144,28 +143,22 @@ def parse_acquisition_date(filename: str) -> date | None:
 
 def destination_path_for_file(dest_root: Path, filename: str) -> Path | None:
     """
-    Формирует путь архива YYYY/MM/DD-DD по семидневным интервалам внутри месяца.
-    Например, 2026-10-05 попадает в каталог 2026/10/01-07.
+    Формирует путь YYYY/ISO-неделя, где одна неделя хранится в одной папке.
+    Например, 2026-09-28 — 2026-10-04 попадает в W40_2026-09-28_2026-10-04.
+    Папка года определяется по ISO-правилам, а не только по календарному году даты.
     """
     acquisition_date = parse_acquisition_date(filename)
     if acquisition_date is None:
         return None
 
-    period_start = ((acquisition_date.day - 1) // 7) * 7 + 1
-    last_day_of_month = calendar.monthrange(
-        acquisition_date.year,
-        acquisition_date.month,
-    )[1]
-    period_end = min(period_start + 6, last_day_of_month)
-    period_folder = f"{period_start:02d}-{period_end:02d}"
-
-    return (
-        dest_root
-        / f"{acquisition_date.year:04d}"
-        / f"{acquisition_date.month:02d}"
-        / period_folder
-        / filename
+    iso_year, iso_week, _ = acquisition_date.isocalendar()
+    week_start = acquisition_date - timedelta(days=acquisition_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_folder = (
+        f"W{iso_week:02d}_{week_start.isoformat()}_{week_end.isoformat()}"
     )
+
+    return dest_root / f"{iso_year:04d}" / week_folder
 
 
 def remove_empty_directories(
@@ -213,7 +206,7 @@ def sort_existing_files(
     logger: logging.Logger,
 ) -> dict[str, int]:
     """
-    Ищет снимки по всему архиву и приводит их к структуре YYYY/MM/01-07 и т. д.
+    Ищет снимки по всему архиву и переносит их в каталоги ISO-недель внутри ISO-года.
     При конфликтах имён не удаляет исходный файл и не перезаписывает архивный.
     После сортировки удаляет только пустые каталоги старой структуры.
     """
@@ -269,7 +262,7 @@ def sort_existing_files(
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
             logger.info(
-                "Отсортирован по недельному интервалу: %s -> %s", source, target
+                "Отсортирован по ISO-неделе: %s -> %s", source, target
             )
             stats["moved"] += 1
         except OSError:
@@ -343,7 +336,7 @@ def audit_archive(
             if not correctly_placed:
                 stats["misplaced"] += 1
                 logger.warning(
-                    "АУДИТ: снимок находится не в целевом недельном каталоге. "
+                    "АУДИТ: снимок находится не в целевом каталоге ISO-недели. "
                     "Ожидалось: %s; найдено: %s",
                     expected_path,
                     path,
