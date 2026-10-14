@@ -154,9 +154,7 @@ def destination_path_for_file(dest_root: Path, filename: str) -> Path | None:
     iso_year, iso_week, _ = acquisition_date.isocalendar()
     week_start = acquisition_date - timedelta(days=acquisition_date.weekday())
     week_end = week_start + timedelta(days=6)
-    week_folder = (
-        f"W{iso_week:02d}_{week_start.isoformat()}_{week_end.isoformat()}"
-    )
+    week_folder = f"W{iso_week:02d}_{week_start.isoformat()}_{week_end.isoformat()}"
 
     return dest_root / f"{iso_year:04d}" / week_folder / filename
 
@@ -261,9 +259,7 @@ def sort_existing_files(
 
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
-            logger.info(
-                "Отсортирован по ISO-неделе: %s -> %s", source, target
-            )
+            logger.info("Отсортирован по ISO-неделе: %s -> %s", source, target)
             stats["moved"] += 1
         except OSError:
             logger.exception("Ошибка при сортировке файла: %s", source)
