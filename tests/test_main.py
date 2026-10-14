@@ -86,7 +86,6 @@ class FilenameTests(unittest.TestCase):
                 self.assertEqual(target.parent.parent.name, expected_year)
 
 
-
 class LocalSortingTests(unittest.TestCase):
     """Проверка безопасной сортировки локальных файлов."""
 
