@@ -179,9 +179,7 @@ def remove_empty_directories(
     removed_count = 0
 
     try:
-        directories = [
-            path for path in dest_root.rglob("*") if path.is_dir()
-        ]
+        directories = [path for path in dest_root.rglob("*") if path.is_dir()]
     except OSError:
         logger.exception("Не удалось просканировать каталоги архива: %s", dest_root)
         return 0
@@ -270,7 +268,9 @@ def sort_existing_files(
 
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
-            logger.info("Отсортирован по недельному интервалу: %s -> %s", source, target)
+            logger.info(
+                "Отсортирован по недельному интервалу: %s -> %s", source, target
+            )
             stats["moved"] += 1
         except OSError:
             logger.exception("Ошибка при сортировке файла: %s", source)
@@ -593,9 +593,7 @@ def main() -> int:
     audit_stats = audit_archive(settings.dest_dir, settings.file_glob, logger)
 
     operational_errors = (
-        sort_stats["errors"]
-        + ftp_stats["errors"]
-        + audit_stats["scan_errors"]
+        sort_stats["errors"] + ftp_stats["errors"] + audit_stats["scan_errors"]
     )
     archive_issues = (
         audit_stats["misplaced"]

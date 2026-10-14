@@ -70,9 +70,7 @@ class FilenameTests(unittest.TestCase):
         ]
         for date_text, expected_bucket in test_cases:
             with self.subTest(date=date_text):
-                filename = (
-                    f"METM24_{date_text}t030639_13488_1_1_BRLK_RLI_log10.tif"
-                )
+                filename = f"METM24_{date_text}t030639_13488_1_1_BRLK_RLI_log10.tif"
                 target = destination_path_for_file(root, filename)
                 self.assertIsNotNone(target)
                 self.assertEqual(target.parent.name, expected_bucket)
