@@ -316,6 +316,12 @@ def audit_archive(
         if not path.is_file():
             continue
 
+        # Windows creates this thumbnail cache in directories opened in Explorer.
+        # It is unrelated to archive integrity and must not trigger a failed run.
+        if path.name.casefold() == "thumbs.db":
+            logger.debug("АУДИТ: служебный кэш Windows пропущен: %s", path)
+            continue
+
         if filename_matches(path.name, file_glob):
             stats["recognized"] += 1
             expected_path = destination_path_for_file(dest_root, path.name)

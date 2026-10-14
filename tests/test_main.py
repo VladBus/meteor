@@ -147,6 +147,16 @@ class LocalSortingTests(unittest.TestCase):
         self.assertTrue(source.exists())
         self.assertEqual(stats["unexpected"], 1)
 
+    def test_windows_thumbs_db_is_ignored_by_audit(self) -> None:
+        """Служебный кэш миниатюр Windows не вызывает предупреждение аудита."""
+        source = self.root / "Thumbs.db"
+        source.write_bytes(b"Windows thumbnail cache")
+
+        stats = audit_archive(self.root, DEFAULT_FILE_GLOB, self.logger)
+
+        self.assertTrue(source.exists())
+        self.assertEqual(stats["unexpected"], 0)
+
     def test_tiff_extension_is_sorted(self) -> None:
         """Снимок с расширением .tiff также переносится в ISO-неделю."""
         filename = SAMPLE.removesuffix(".tif") + ".tiff"
